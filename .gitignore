@@ -43,3 +43,5 @@ cmd/trivy/trivy
 
 # RPM
 *.rpm
+
+.github-pat

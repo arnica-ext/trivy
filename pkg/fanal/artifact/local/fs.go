@@ -160,8 +160,10 @@ func (a Artifact) Inspect(ctx context.Context) (artifact.Reference, error) {
 	result := analyzer.NewAnalysisResult()
 	limit := semaphore.New(a.artifactOption.Parallel)
 	opts := analyzer.AnalysisOptions{
-		Offline:      a.artifactOption.Offline,
-		FileChecksum: a.artifactOption.FileChecksum,
+		Offline:       a.artifactOption.Offline,
+		UseMavenCache: a.artifactOption.UseMavenCache,
+		MavenCacheTtl: a.artifactOption.MavenCacheTtl,
+		FileChecksum:  a.artifactOption.FileChecksum,
 	}
 
 	// Prepare filesystem for post analysis

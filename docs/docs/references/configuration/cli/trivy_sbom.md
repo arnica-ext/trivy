@@ -159,5 +159,4 @@ trivy sbom [flags] SBOM_PATH
 
 ### SEE ALSO
 
-* [trivy](trivy.md)	 - Unified security scanner
-
+- [trivy](trivy.md) - Unified security scanner
