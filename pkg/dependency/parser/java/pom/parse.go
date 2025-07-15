@@ -13,11 +13,6 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/hashicorp/go-multierror"
-	"github.com/samber/lo"
-	"golang.org/x/net/html/charset"
-	"golang.org/x/xerrors"
-
 	"github.com/aquasecurity/trivy/pkg/dependency"
 	"github.com/aquasecurity/trivy/pkg/dependency/parser/utils"
 	ftypes "github.com/aquasecurity/trivy/pkg/fanal/types"
@@ -25,14 +20,16 @@ import (
 	"github.com/aquasecurity/trivy/pkg/set"
 	xhttp "github.com/aquasecurity/trivy/pkg/x/http"
 	xio "github.com/aquasecurity/trivy/pkg/x/io"
-)
-
-const (
-	centralURL = "https://repo.maven.apache.org/maven2/"
+	"github.com/hashicorp/go-multierror"
+	"github.com/samber/lo"
+	"golang.org/x/net/html/charset"
+	"golang.org/x/xerrors"
 )
 
 type options struct {
 	offline             bool
+	useMavenCache       bool
+	mavenCacheTtl       int
 	releaseRemoteRepos  []string
 	snapshotRemoteRepos []string
 }
@@ -42,6 +39,18 @@ type option func(*options)
 func WithOffline(offline bool) option {
 	return func(opts *options) {
 		opts.offline = offline
+	}
+}
+
+func WithUseMavenCache(useMavenCache bool) option {
+	return func(opts *options) {
+		opts.useMavenCache = useMavenCache
+	}
+}
+
+func WithMavenCacheTtl(ttl int) option {
+	return func(opts *options) {
+		opts.mavenCacheTtl = ttl
 	}
 }
 
@@ -61,6 +70,7 @@ type Parser struct {
 	logger              *log.Logger
 	rootPath            string
 	cache               pomCache
+	mavenHttpCache      *mavenHttpCache
 	localRepository     string
 	releaseRemoteRepos  []string
 	snapshotRemoteRepos []string
@@ -68,11 +78,23 @@ type Parser struct {
 	servers             []Server
 }
 
+const (
+	centralURL = "https://repo.maven.apache.org/maven2/"
+)
+
+var mavenReleaseRepos = []string{centralURL}
+
 func NewParser(filePath string, opts ...option) *Parser {
+	var logger = log.WithPrefix("pom")
+
 	o := &options{
 		offline:            false,
-		releaseRemoteRepos: []string{centralURL}, // Maven doesn't use central repository for snapshot dependencies
+		useMavenCache:      false,
+		mavenCacheTtl:      720,
+		releaseRemoteRepos: mavenReleaseRepos, // Maven doesn't use central repository for snapshot dependencies
 	}
+
+	logger.Debug("Creating parser", log.String("releaseRemoteRepos", strings.Join(o.releaseRemoteRepos, ", ")))
 
 	for _, opt := range opts {
 		opt(o)
@@ -85,10 +107,17 @@ func NewParser(filePath string, opts ...option) *Parser {
 		localRepository = filepath.Join(homeDir, ".m2", "repository")
 	}
 
+	var mavenHttpCache *mavenHttpCache = nil
+
+	if o.useMavenCache {
+		mavenHttpCache = newMavenHttpCache(logger, o.mavenCacheTtl)
+	}
+
 	return &Parser{
-		logger:              log.WithPrefix("pom"),
+		logger:              logger,
 		rootPath:            filepath.Clean(filePath),
 		cache:               newPOMCache(),
+		mavenHttpCache:      mavenHttpCache,
 		localRepository:     localRepository,
 		releaseRemoteRepos:  o.releaseRemoteRepos,
 		snapshotRemoteRepos: o.snapshotRemoteRepos,
@@ -557,7 +586,7 @@ func (p *Parser) retrieveParent(currentPath, relativePath string, target artifac
 		errs = multierror.Append(errs, err)
 	}
 
-	// If not found, search the parent director
+	// If not found, search the parent directory
 	pom, err := p.tryRelativePath(target, currentPath, "../pom.xml")
 	if err == nil {
 		return pom, nil
@@ -743,6 +772,108 @@ func (p *Parser) remoteRepoRequest(repo string, paths []string) (*http.Request, 
 	return req, nil
 }
 
+var client = xhttp.Client()
+
+func httpRequest(req *http.Request) ([]byte, int, error) {
+	var resp *http.Response
+	var err error
+	var statusCode int = 0
+	var data = []byte{}
+
+	resp, err = client.Do(req)
+
+	// HTTP request was made successfully (doesn't mean it was a 2xx, just that the client did not return an error)
+	if err == nil {
+		defer resp.Body.Close()
+
+		statusCode = resp.StatusCode
+
+		// Read response body
+		data, err = io.ReadAll(resp.Body)
+
+		if err != nil {
+			return nil, statusCode, err
+		}
+
+		return data, statusCode, nil
+	} else {
+		// Error when making HTTP request
+		return nil, statusCode, err
+	}
+}
+
+// performs an HTTP request with caching support (if enabled)
+func (p *Parser) cachedHTTPRequest(req *http.Request, path string) ([]byte, int, error) {
+	var err error
+	var statusCode int = 0
+	var data = []byte{}
+
+	// E.g. if the cache is disabled, make a regular HTTP request without caching
+	if p.mavenHttpCache == nil {
+		data, statusCode, err = httpRequest(req)
+		return data, statusCode, err
+	}
+
+	url := req.URL.String()
+
+	if entry, err := p.mavenHttpCache.get(path); err != nil {
+		p.logger.Debug("Cache read error", log.String("url", url), log.String("path", path), log.Err(err))
+	} else if entry != nil {
+		p.logger.Debug("Cache hit", log.String("url", url), log.String("path", path))
+		return entry.Data, entry.StatusCode, nil
+	} else {
+		p.logger.Debug("Cache miss, making HTTP request", log.String("url", url), log.String("path", path))
+	}
+
+	if p.mavenHttpCache.isDomainBlocklisted(req.URL.Host) {
+		p.logger.Debug(
+			fmt.Sprintf("Domain %s is blocklisted, assuming 404", req.URL.Host),
+		)
+		return nil, http.StatusNotFound, nil
+	} else {
+		data, statusCode, err = httpRequest(req)
+
+		// Error when making HTTP request
+		if err != nil {
+			p.logger.Debug("HTTP error", log.String("url", url), log.String("path", path), log.Err(err))
+
+			if strings.Contains(err.Error(), "i/o timeout") {
+				p.mavenHttpCache.domainTimeouts[req.URL.Host]++
+
+				p.logger.Debug(
+					"I/O timeout, falling back to 404",
+					log.Int(fmt.Sprintf("numTimeouts[%s]", req.URL.Host), p.mavenHttpCache.domainTimeouts[req.URL.Host]),
+				)
+
+				if p.mavenHttpCache.domainTimeouts[req.URL.Host] >= MaxDomainTimeouts {
+					p.logger.Warn(
+						fmt.Sprintf("Blocklisting domain %s due to too many timeouts", req.URL.Host),
+					)
+
+					err = p.mavenHttpCache.blocklistDomain(req.URL.Host)
+				}
+
+				return nil, http.StatusNotFound, err
+			} else {
+				return nil, statusCode, err
+			}
+		}
+	}
+
+	// Cache 2xx or 404 (we don't want to keep fetching artifacts that are not found via 404)
+	if statusCode == http.StatusOK || statusCode == http.StatusNotFound {
+		if cacheErr := p.mavenHttpCache.set(url, path, data, statusCode); cacheErr != nil {
+			p.logger.Debug("Failed to cache response", log.String("url", url), log.String("path", path), log.Err(cacheErr))
+		} else {
+			p.logger.Debug("Cached response", log.String("url", url), log.String("path", path))
+		}
+	} else {
+		p.logger.Debug("Response not successful, no caching", log.String("url", url), log.String("path", path), log.Int("statusCode", statusCode))
+	}
+
+	return data, statusCode, nil
+}
+
 // fetchPomFileNameFromMavenMetadata fetches `maven-metadata.xml` file to detect file name of pom file.
 func (p *Parser) fetchPomFileNameFromMavenMetadata(repo string, paths []string) (string, error) {
 	// Overwrite pom file name to `maven-metadata.xml`
@@ -755,18 +886,16 @@ func (p *Parser) fetchPomFileNameFromMavenMetadata(repo string, paths []string) 
 		return "", nil
 	}
 
-	client := xhttp.Client()
-	resp, err := client.Do(req)
+	data, statusCode, err := p.cachedHTTPRequest(req, strings.Join(mavenMetadataPaths, "/"))
 	if err != nil {
 		p.logger.Debug("Failed to fetch", log.String("url", req.URL.String()), log.Err(err))
 		return "", nil
-	} else if resp.StatusCode != http.StatusOK {
-		p.logger.Debug("Failed to fetch", log.String("url", req.URL.String()), log.Int("statusCode", resp.StatusCode))
+	} else if statusCode != http.StatusOK {
+		p.logger.Debug("Failed to fetch", log.String("url", req.URL.String()), log.Int("statusCode", statusCode))
 		return "", nil
 	}
-	defer resp.Body.Close()
 
-	mavenMetadata, err := parseMavenMetadata(resp.Body)
+	mavenMetadata, err := parseMavenMetadata(strings.NewReader(string(data)))
 	if err != nil {
 		return "", xerrors.Errorf("failed to parse maven-metadata.xml file: %w", err)
 	}
@@ -789,18 +918,16 @@ func (p *Parser) fetchPOMFromRemoteRepository(repo string, paths []string) (*pom
 		return nil, nil
 	}
 
-	client := xhttp.Client()
-	resp, err := client.Do(req)
+	data, statusCode, err := p.cachedHTTPRequest(req, strings.Join(paths, "/"))
 	if err != nil {
 		p.logger.Debug("Failed to fetch", log.String("url", req.URL.String()), log.Err(err))
 		return nil, nil
-	} else if resp.StatusCode != http.StatusOK {
-		p.logger.Debug("Failed to fetch", log.String("url", req.URL.String()), log.Int("statusCode", resp.StatusCode))
+	} else if statusCode != http.StatusOK {
+		p.logger.Debug("Failed to fetch", log.String("url", req.URL.String()), log.Int("statusCode", statusCode))
 		return nil, nil
 	}
-	defer resp.Body.Close()
 
-	content, err := parsePom(resp.Body, false)
+	content, err := parsePom(strings.NewReader(string(data)), false)
 	if err != nil {
 		return nil, xerrors.Errorf("failed to parse the remote POM: %w", err)
 	}
