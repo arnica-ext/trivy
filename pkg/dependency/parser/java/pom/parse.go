@@ -583,13 +583,25 @@ func (p *Parser) tryRelativePath(parentArtifact artifact, currentPath, relativeP
 
 	// To avoid an infinite loop or parsing the wrong parent when using relatedPath or `../pom.xml`,
 	// we need to compare GAV of `parentArtifact` (`parent` tag from base pom) and GAV of pom from `relativePath`.
-	// See `compare ArtifactIDs for base and parent pom's` test for example.
-	// But GroupID can be inherited from parent (`p.analyze` function is required to get the GroupID).
-	// Version can contain a property (`p.analyze` function is required to get the GroupID).
-	// So we can only match ArtifactID's.
-	if parsedPOM.artifact().ArtifactID != parentArtifact.ArtifactID {
-		return nil, xerrors.New("'parent.relativePath' points at wrong local POM")
+	// See `compare ArtifactIDs for base and parent poms` and 'compare GroupIDs for base and parent poms' tests for examples.
+
+	pomArtifact := parsedPOM.artifact()
+
+	if pomArtifact.ArtifactID != parentArtifact.ArtifactID {
+		return nil, xerrors.New("'parent.relativePath' points at wrong local POM (ArtifactID Mismatch)")
 	}
+
+	// if GroupID is unset in child POM, it's inherited, meaning it matches the parent POM
+	// if GroupID is unset in the parent POM, it's also inherited, but we cannot know here whether it matches child POM (unless they are both inherited)
+	// case 1: child and parent POM groupID are both unset -> continue
+	// case 2: child POM groupID is unset, parent POM is set -> continue
+	// case 3: child POM groupID is set, parent POM is unset -> continue
+	// case 4: child and parent POM groupID are both set and match -> continue
+	// case 5: child and parent POM groupID are both set and do not match -> error
+	if pomArtifact.GroupID != parentArtifact.GroupID && pomArtifact.GroupID != "" && parentArtifact.GroupID != "" {
+		return nil, xerrors.New("'parent.relativePath' points at wrong local POM (GroupID Mismatch)")
+	}
+
 	if err := p.resolveParent(parsedPOM); err != nil {
 		return nil, xerrors.Errorf("analyze error: %w", err)
 	}
