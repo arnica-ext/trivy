@@ -8,7 +8,7 @@ builds:
     ldflags:
       - -s -w
       - "-extldflags '-static'"
-      - -X github.com/aayachnes/trivy/pkg/version/app.ver={{ .Version }}
+      - -X github.com/arnica-ext/trivy/pkg/version/app.ver={{ .Version }}
     env:
       - CGO_ENABLED=0
     goos:
@@ -28,7 +28,7 @@ builds:
     ldflags:
       - -s -w
       - "-extldflags '-static'"
-      - -X github.com/aayachnes/trivy/pkg/version/app.ver={{ .Version }}
+      - -X github.com/arnica-ext/trivy/pkg/version/app.ver={{ .Version }}
     env:
       - CGO_ENABLED=0
     goos:
@@ -104,7 +104,7 @@ archives:
 #     repository:
 #       owner: aquasecurity
 #       name: homebrew-trivy
-#     homepage: "https://github.com/aayachnes/trivy"
+#     homepage: "https://github.com/arnica-ext/trivy"
 #     description: "Scanner for vulnerabilities in container images, file systems, and Git repositories, as well as for configuration issues"
 #     test: |
 #       system "#{bin}/trivy", "--version"
@@ -128,7 +128,7 @@ archives:
 #       - "--label=org.opencontainers.image.vendor=Aqua Security"
 #       - "--label=org.opencontainers.image.version={{ .Version }}"
 #       - "--label=org.opencontainers.image.created={{ .Date }}"
-#       - "--label=org.opencontainers.image.source=https://github.com/aayachnes/trivy"
+#       - "--label=org.opencontainers.image.source=https://github.com/arnica-ext/trivy"
 #       - "--label=org.opencontainers.image.revision={{ .FullCommit }}"
 #       - "--label=org.opencontainers.image.url=https://www.aquasec.com/products/trivy/"
 #       - "--label=org.opencontainers.image.documentation=https://aquasecurity.github.io/trivy/v{{ .Version }}/"
@@ -153,7 +153,7 @@ archives:
 #       - "--label=org.opencontainers.image.vendor=Aqua Security"
 #       - "--label=org.opencontainers.image.version={{ .Version }}"
 #       - "--label=org.opencontainers.image.created={{ .Date }}"
-#       - "--label=org.opencontainers.image.source=https://github.com/aayachnes/trivy"
+#       - "--label=org.opencontainers.image.source=https://github.com/arnica-ext/trivy"
 #       - "--label=org.opencontainers.image.revision={{ .FullCommit }}"
 #       - "--label=org.opencontainers.image.url=https://www.aquasec.com/products/trivy/"
 #       - "--label=org.opencontainers.image.documentation=https://aquasecurity.github.io/trivy/v{{ .Version }}/"
@@ -178,7 +178,7 @@ archives:
 #       - "--label=org.opencontainers.image.vendor=Aqua Security"
 #       - "--label=org.opencontainers.image.version={{ .Version }}"
 #       - "--label=org.opencontainers.image.created={{ .Date }}"
-#       - "--label=org.opencontainers.image.source=https://github.com/aayachnes/trivy"
+#       - "--label=org.opencontainers.image.source=https://github.com/arnica-ext/trivy"
 #       - "--label=org.opencontainers.image.revision={{ .FullCommit }}"
 #       - "--label=org.opencontainers.image.url=https://www.aquasec.com/products/trivy/"
 #       - "--label=org.opencontainers.image.documentation=https://aquasecurity.github.io/trivy/v{{ .Version }}/"
@@ -203,7 +203,7 @@ archives:
 #       - "--label=org.opencontainers.image.vendor=Aqua Security"
 #       - "--label=org.opencontainers.image.version={{ .Version }}"
 #       - "--label=org.opencontainers.image.created={{ .Date }}"
-#       - "--label=org.opencontainers.image.source=https://github.com/aayachnes/trivy"
+#       - "--label=org.opencontainers.image.source=https://github.com/arnica-ext/trivy"
 #       - "--label=org.opencontainers.image.revision={{ .FullCommit }}"
 #       - "--label=org.opencontainers.image.url=https://www.aquasec.com/products/trivy/"
 #       - "--label=org.opencontainers.image.documentation=https://aquasecurity.github.io/trivy/v{{ .Version }}/"
