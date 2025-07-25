@@ -18,6 +18,7 @@ import (
 	"github.com/aquasecurity/trivy/pkg/fanal/types"
 	"github.com/aquasecurity/trivy/pkg/log"
 	"github.com/aquasecurity/trivy/pkg/oci"
+	bolt "go.etcd.io/bbolt"
 )
 
 const (
@@ -34,7 +35,7 @@ var (
 	DefaultGCRRepository = fmt.Sprintf("%s:%d", "mirror.gcr.io/aquasec/trivy-db", db.SchemaVersion)
 	defaultGCRRepository = lo.Must(name.NewTag(DefaultGCRRepository))
 
-	Init  = db.Init
+	Init  = InitWithOptions
 	Close = db.Close
 	Path  = db.Path
 )
@@ -42,6 +43,12 @@ var (
 type options struct {
 	artifact       *oci.Artifact
 	dbRepositories []name.Reference
+}
+
+func InitWithOptions(dbDir string) (err error) {
+	return db.Init(dbDir, db.WithBoltOptions(&bolt.Options{
+		ReadOnly: true,
+	}))
 }
 
 // Option is a functional option
