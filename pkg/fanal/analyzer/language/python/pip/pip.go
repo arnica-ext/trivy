@@ -96,7 +96,8 @@ func (a pipLibraryAnalyzer) PostAnalyze(_ context.Context, input analyzer.PostAn
 
 func (a pipLibraryAnalyzer) Required(filePath string, _ os.FileInfo) bool {
 	fileName := filepath.Base(filePath)
-	return fileName == types.PipRequirements
+	// Match requirements.txt, requirements-dev.txt, dev-requirements.txt, etc.
+	return fileName == types.PipRequirements || (strings.Contains(fileName, "requirements") && strings.HasSuffix(fileName, ".txt"));
 }
 
 func (a pipLibraryAnalyzer) Type() analyzer.Type {
