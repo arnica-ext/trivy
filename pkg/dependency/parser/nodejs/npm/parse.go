@@ -272,15 +272,25 @@ func findDependsOn(pkgPath, depName string, packages map[string]Package) (string
 }
 
 func (p *Parser) parseV1(dependencies map[string]Dependency, versions map[string]string) ([]ftypes.Package, []ftypes.Dependency) {
-	// Update package name and version mapping.
-	for pkgName, dep := range dependencies {
+	// Sort package names for deterministic iteration
+	pkgNames := make([]string, 0, len(dependencies))
+	for pkgName := range dependencies {
+		pkgNames = append(pkgNames, pkgName)
+	}
+	sort.Strings(pkgNames)
+
+	// Update package name and version mapping in sorted order
+	for _, pkgName := range pkgNames {
+		dep := dependencies[pkgName]
 		// Overwrite the existing package version so that the nested version can take precedence.
 		versions[pkgName] = dep.Version
 	}
 
 	var pkgs []ftypes.Package
 	var deps []ftypes.Dependency
-	for pkgName, dep := range dependencies {
+	// Process packages in sorted order for deterministic results
+	for _, pkgName := range pkgNames {
+		dep := dependencies[pkgName]
 		pkg := ftypes.Package{
 			ID:           packageID(pkgName, dep.Version),
 			Name:         pkgName,
@@ -297,8 +307,16 @@ func (p *Parser) parseV1(dependencies map[string]Dependency, versions map[string
 		}
 		pkgs = append(pkgs, pkg)
 
+		// Sort dependency names for deterministic resolution order
+		requireNames := make([]string, 0, len(dep.Requires))
+		for pName := range dep.Requires {
+			requireNames = append(requireNames, pName)
+		}
+		sort.Strings(requireNames)
+
 		dependsOn := make([]string, 0, len(dep.Requires))
-		for pName, requiredVer := range dep.Requires {
+		for _, pName := range requireNames {
+			requiredVer := dep.Requires[pName]
 			// Try to resolve the version with nested dependencies first
 			if resolvedDep, ok := dep.Dependencies[pName]; ok {
 				pkgID := packageID(pName, resolvedDep.Version)
