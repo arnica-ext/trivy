@@ -2,12 +2,16 @@ package npm
 
 import (
 	"fmt"
+	"io"
 	"maps"
+	"os"
 	"path"
+	"path/filepath"
 	"slices"
 	"sort"
 	"strings"
 
+	npm "github.com/aquasecurity/go-npm-version/pkg"
 	"github.com/samber/lo"
 	"golang.org/x/xerrors"
 
@@ -26,6 +30,10 @@ type LockFile struct {
 	Dependencies    map[string]Dependency `json:"dependencies"`
 	Packages        map[string]Package    `json:"packages"`
 	LockfileVersion int                   `json:"lockfileVersion"`
+}
+type PackageJsonFile struct {
+	Dependencies    map[string]string `json:"dependencies"`
+	DevDependencies map[string]string `json:"devDependencies"`
 }
 type Dependency struct {
 	Version      string                `json:"version"`
@@ -60,6 +68,13 @@ func NewParser() *Parser {
 	}
 }
 
+func pathOf(r io.ReadSeeker) string {
+	if f, ok := r.(*os.File); ok {
+		return f.Name()
+	}
+	return ""
+}
+
 func (p *Parser) Parse(r xio.ReadSeekerAt) ([]ftypes.Package, []ftypes.Dependency, error) {
 	var lockFile LockFile
 	if err := xjson.UnmarshalRead(r, &lockFile); err != nil {
@@ -69,7 +84,9 @@ func (p *Parser) Parse(r xio.ReadSeekerAt) ([]ftypes.Package, []ftypes.Dependenc
 	var pkgs []ftypes.Package
 	var deps []ftypes.Dependency
 	if lockFile.LockfileVersion == 1 {
-		pkgs, deps = p.parseV1(lockFile.Dependencies, make(map[string]string))
+		var lockFilePath = pathOf(r)
+
+		pkgs, deps = p.parseV1(lockFile.Dependencies, make(map[string]string), p.readPackageJSON(lockFilePath))
 	} else {
 		pkgs, deps = p.parseV2(lockFile.Packages)
 	}
@@ -271,32 +288,32 @@ func findDependsOn(pkgPath, depName string, packages map[string]Package) (string
 	return "", xerrors.Errorf("can't find dependsOn for %s", depName)
 }
 
-func (p *Parser) parseV1(dependencies map[string]Dependency, versions map[string]string) ([]ftypes.Package, []ftypes.Dependency) {
-	// Sort package names for deterministic iteration
-	pkgNames := make([]string, 0, len(dependencies))
+func (p *Parser) parseV1(dependencies map[string]Dependency, versions map[string]string, pkgJSON *PackageJsonFile) ([]ftypes.Package, []ftypes.Dependency) {
+	// Sort dependency names to ensure deterministic iteration order (without this, BOM output is non-deterministic)
+	depNames := make([]string, 0, len(dependencies))
 	for pkgName := range dependencies {
-		pkgNames = append(pkgNames, pkgName)
+		depNames = append(depNames, pkgName)
 	}
-	sort.Strings(pkgNames)
+	sort.Strings(depNames)
 
-	// Update package name and version mapping in sorted order
-	for _, pkgName := range pkgNames {
-		dep := dependencies[pkgName]
+	// Update package name and version mapping - ORDER DOESN'T MATTER HERE
+	for pkgName, dep := range dependencies {
 		// Overwrite the existing package version so that the nested version can take precedence.
 		versions[pkgName] = dep.Version
 	}
 
 	var pkgs []ftypes.Package
 	var deps []ftypes.Dependency
-	// Process packages in sorted order for deterministic results
-	for _, pkgName := range pkgNames {
+	for _, pkgName := range depNames {
 		dep := dependencies[pkgName]
+		var relationship = p.getV1DependencyRelationship(pkgName, dep, pkgJSON)
+
 		pkg := ftypes.Package{
 			ID:           packageID(pkgName, dep.Version),
 			Name:         pkgName,
 			Version:      dep.Version,
 			Dev:          dep.Dev,
-			Relationship: ftypes.RelationshipUnknown, // lockfile v1 schema doesn't have information about direct dependencies
+			Relationship: relationship,
 			ExternalReferences: []ftypes.ExternalRef{
 				{
 					Type: ftypes.RefOther,
@@ -307,16 +324,9 @@ func (p *Parser) parseV1(dependencies map[string]Dependency, versions map[string
 		}
 		pkgs = append(pkgs, pkg)
 
-		// Sort dependency names for deterministic resolution order
-		requireNames := make([]string, 0, len(dep.Requires))
-		for pName := range dep.Requires {
-			requireNames = append(requireNames, pName)
-		}
-		sort.Strings(requireNames)
+		dependsOn := make([]string, 0, len(dep.Requires)+len(dep.Dependencies))
 
-		dependsOn := make([]string, 0, len(dep.Requires))
-		for _, pName := range requireNames {
-			requiredVer := dep.Requires[pName]
+		for pName, requiredVer := range dep.Requires {
 			// Try to resolve the version with nested dependencies first
 			if resolvedDep, ok := dep.Dependencies[pName]; ok {
 				pkgID := packageID(pName, resolvedDep.Version)
@@ -343,14 +353,90 @@ func (p *Parser) parseV1(dependencies map[string]Dependency, versions map[string
 		}
 
 		if dep.Dependencies != nil {
-			// Recursion
-			childpkgs, childDeps := p.parseV1(dep.Dependencies, maps.Clone(versions))
+			// Recursion - nested dependencies are not direct dependencies from the root
+			childpkgs, childDeps := p.parseV1(dep.Dependencies, maps.Clone(versions), nil)
 			pkgs = append(pkgs, childpkgs...)
 			deps = append(deps, childDeps...)
 		}
 	}
 
 	return pkgs, deps
+}
+
+// readPackageJSON attempts to read and parse package.json from the same directory as package-lock.json
+func (p *Parser) readPackageJSON(lockFilePath string) *PackageJsonFile {
+	if lockFilePath == "" {
+		return nil
+	}
+
+	// Get the directory of the lock file
+	dir := filepath.Dir(lockFilePath)
+	pkgJSONPath := filepath.Join(dir, "package.json")
+
+	// Try to open package.json
+	f, err := os.Open(pkgJSONPath)
+	if err != nil {
+		// It's okay if package.json doesn't exist
+		p.logger.Debug("package.json not found", log.FilePath(pkgJSONPath))
+		return nil
+	}
+	defer f.Close()
+
+	// Read and unmarshal package.json into PackageJsonFile struct
+	var packageJsonFile PackageJsonFile
+	if err := xjson.UnmarshalRead(f, &packageJsonFile); err != nil {
+		p.logger.Debug("Failed to parse package.json", log.Err(err))
+		return nil
+	}
+
+	return &packageJsonFile
+}
+
+// Get the dependency relationship type of a package-lock.json V1 dependency
+func (p *Parser) getV1DependencyRelationship(pkgName string, dep Dependency, pkgJSON *PackageJsonFile) ftypes.Relationship {
+	if pkgJSON == nil {
+		// We cannot determine the dependency relationship since there is no corresponding package.json
+		return ftypes.RelationshipUnknown
+	}
+
+	// This dependency is only a direct dependency if it matches one of the semver constraints in package.json ("dependencies" field)
+	depConstraint, isDep := pkgJSON.Dependencies[pkgName]
+
+	if isDep {
+		if p.matchesConstraint(dep.Version, depConstraint) {
+			return ftypes.RelationshipDirect
+		}
+	}
+
+	// This dependency is only a direct dependency if it matches one of the semver constraints in package.json ("devDependencies" field)
+	devDepConstraint, isDevDep := pkgJSON.DevDependencies[pkgName]
+
+	if isDevDep {
+		if p.matchesConstraint(dep.Version, devDepConstraint) {
+			return ftypes.RelationshipDirect
+		}
+	}
+
+	return ftypes.RelationshipIndirect
+}
+
+// matchesConstraint checks if a version satisfies a semver constraint
+func (p *Parser) matchesConstraint(version, constraint string) bool {
+	v, err := npm.NewVersion(version)
+	if err != nil {
+		p.logger.Debug("Failed to parse version",
+			log.String("version", version), log.Err(err))
+		return false
+	}
+
+	c, err := npm.NewConstraints(constraint)
+	if err != nil {
+		p.logger.Debug("Failed to parse constraint",
+			log.String("constraint", constraint), log.Err(err))
+		return false
+	}
+
+	return c.Check(v)
 }
 
 func (p *Parser) pkgNameFromPath(pkgPath string) string {

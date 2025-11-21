@@ -45,3 +45,7 @@ cmd/trivy/trivy
 *.rpm
 
 .github-pat
+
+pkg/fanal/analyzer/language/golang/mod/testdata/pkg/mod/github.com/aquasecurity/go-dep-parser@v0.0.0-20220406074731-71021a481237/go.sum
+pkg/fanal/analyzer/language/golang/mod/testdata/pkg/mod/github.com/aquasecurity/go-dep-parser@v0.0.0-20230219131432-590b1dfb6edd/go.sum
+pkg/fanal/analyzer/language/golang/mod/testdata/pkg/mod/github.com/aquasecurity/go-dep-parser@v0.0.1/go.sum

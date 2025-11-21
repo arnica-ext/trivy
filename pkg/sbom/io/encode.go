@@ -430,6 +430,7 @@ func (*Encoder) belongToParent(pkg ftypes.Package, parents map[string]ftypes.Pac
 		return !hasRoot
 	}
 
+	// If the package has no parents,
 	return len(parents[pkg.ID]) == 0
 }
 
