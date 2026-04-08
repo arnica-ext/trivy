@@ -99,8 +99,9 @@ func (a *Storage) Analyze(ctx context.Context, r *io.SectionReader) (types.BlobI
 	opts := analyzer.AnalysisOptions{
 		Offline:       a.artifactOption.Offline,
 		FileChecksum:  a.artifactOption.FileChecksum,
-		UseMavenCache: a.artifactOption.UseMavenCache,
-		MavenCacheTtl: a.artifactOption.MavenCacheTtl,
+		UseMavenCache:   a.artifactOption.UseMavenCache,
+		MavenCacheTtl:   a.artifactOption.MavenCacheTtl,
+		MavenCentralURL: a.artifactOption.MavenCentralURL,
 	}
 
 	// Prepare filesystem for post analysis

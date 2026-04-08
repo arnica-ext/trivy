@@ -162,8 +162,9 @@ func (a Artifact) Inspect(ctx context.Context) (artifact.Reference, error) {
 	opts := analyzer.AnalysisOptions{
 		Offline:       a.artifactOption.Offline,
 		FileChecksum:  a.artifactOption.FileChecksum,
-		UseMavenCache: a.artifactOption.UseMavenCache,
-		MavenCacheTtl: a.artifactOption.MavenCacheTtl,
+		UseMavenCache:   a.artifactOption.UseMavenCache,
+		MavenCacheTtl:   a.artifactOption.MavenCacheTtl,
+		MavenCentralURL: a.artifactOption.MavenCentralURL,
 	}
 
 	// Prepare filesystem for post analysis
