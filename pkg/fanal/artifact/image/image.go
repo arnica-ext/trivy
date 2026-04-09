@@ -371,8 +371,9 @@ func (a Artifact) inspectLayer(ctx context.Context, layer types.Layer, disabled 
 	opts := analyzer.AnalysisOptions{
 		Offline:       a.artifactOption.Offline,
 		FileChecksum:  a.artifactOption.FileChecksum,
-		UseMavenCache: a.artifactOption.UseMavenCache,
-		MavenCacheTtl: a.artifactOption.MavenCacheTtl,
+		UseMavenCache:   a.artifactOption.UseMavenCache,
+		MavenCacheTtl:   a.artifactOption.MavenCacheTtl,
+		MavenCentralURL: a.artifactOption.MavenCentralURL,
 	}
 	result := analyzer.NewAnalysisResult()
 	limit := semaphore.New(a.artifactOption.Parallel)

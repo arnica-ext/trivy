@@ -25,6 +25,7 @@ type Option struct {
 	Offline           bool
 	UseMavenCache     bool
 	MavenCacheTtl     int
+	MavenCentralURL   string
 	AppDirs           []string
 	SBOMSources       []string
 	RekorURL          string

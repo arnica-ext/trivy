@@ -168,8 +168,9 @@ func (f FilePatterns) Match(filePath string) bool {
 type AnalysisOptions struct {
 	Offline       bool
 	FileChecksum  bool
-	UseMavenCache bool
-	MavenCacheTtl int
+	UseMavenCache   bool
+	MavenCacheTtl   int
+	MavenCentralURL string
 }
 
 type AnalysisResult struct {

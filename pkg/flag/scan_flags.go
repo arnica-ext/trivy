@@ -43,6 +43,12 @@ var (
 		Default:    720,
 		Usage:      "TTL in minutes for Maven cache entries",
 	}
+	MavenCentralURLFlag = Flag[string]{
+		Name:       "maven-central-url",
+		ConfigName: "scan.maven-central-url",
+		Default:    "https://repo.maven.apache.org/maven2/",
+		Usage:      "specify the Maven Central repository URL",
+	}
 	ScannersFlag = Flag[[]string]{
 		Name:       "scanners",
 		ConfigName: "scan.scanners",
@@ -154,6 +160,7 @@ type ScanFlagGroup struct {
 	OfflineScan       *Flag[bool]
 	UseMavenCache     *Flag[bool]
 	MavenCacheTtl     *Flag[int]
+	MavenCentralURL   *Flag[string]
 	Scanners          *Flag[[]string]
 	FilePatterns      *Flag[[]string]
 	Slow              *Flag[bool] // deprecated
@@ -173,6 +180,7 @@ type ScanOptions struct {
 	OfflineScan       bool
 	UseMavenCache     bool
 	MavenCacheTtl     int
+	MavenCentralURL   string
 	Scanners          types.Scanners
 	FilePatterns      []string
 	Parallel          int
@@ -191,6 +199,7 @@ func NewScanFlagGroup() *ScanFlagGroup {
 		OfflineScan:       OfflineScanFlag.Clone(),
 		UseMavenCache:     MavenCacheFlag.Clone(),
 		MavenCacheTtl:     MavenCacheTtlFlag.Clone(),
+		MavenCentralURL:   MavenCentralURLFlag.Clone(),
 		Scanners:          ScannersFlag.Clone(),
 		FilePatterns:      FilePatternsFlag.Clone(),
 		Parallel:          ParallelFlag.Clone(),
@@ -215,6 +224,7 @@ func (f *ScanFlagGroup) Flags() []Flagger {
 		f.OfflineScan,
 		f.UseMavenCache,
 		f.MavenCacheTtl,
+		f.MavenCentralURL,
 		f.Scanners,
 		f.FilePatterns,
 		f.Slow,
@@ -259,6 +269,7 @@ func (f *ScanFlagGroup) ToOptions(opts *Options) error {
 		OfflineScan:       f.OfflineScan.Value(),
 		UseMavenCache:     f.UseMavenCache.Value(),
 		MavenCacheTtl:     f.MavenCacheTtl.Value(),
+		MavenCentralURL:   f.MavenCentralURL.Value(),
 		Scanners:          xstrings.ToTSlice[types.Scanner](f.Scanners.Value()),
 		FilePatterns:      f.FilePatterns.Value(),
 		Parallel:          parallel,
