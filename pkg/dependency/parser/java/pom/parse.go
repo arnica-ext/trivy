@@ -78,6 +78,12 @@ type Parser struct {
 	servers             []Server
 }
 
+const (
+	centralURL = "https://repo.maven.apache.org/maven2/"
+)
+
+var mavenReleaseRepos = []string{centralURL}
+
 func NewParser(filePath string, opts ...option) *Parser {
 	var logger = log.WithPrefix("pom")
 
@@ -85,13 +91,14 @@ func NewParser(filePath string, opts ...option) *Parser {
 		offline:            false,
 		useMavenCache:      false,
 		mavenCacheTtl:      720,
+		releaseRemoteRepos: mavenReleaseRepos, // Maven doesn't use central repository for snapshot dependencies
 	}
+
+	logger.Debug("Creating parser", log.String("releaseRemoteRepos", strings.Join(o.releaseRemoteRepos, ", ")))
 
 	for _, opt := range opts {
 		opt(o)
 	}
-
-	logger.Debug("Creating parser", log.String("releaseRemoteRepos", strings.Join(o.releaseRemoteRepos, ", ")))
 
 	s := readSettings()
 	localRepository := s.LocalRepository
