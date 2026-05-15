@@ -30,6 +30,7 @@ func (a pomAnalyzer) Analyze(_ context.Context, input analyzer.AnalysisInput) (*
 		pom.WithOffline(input.Options.Offline),
 		pom.WithUseMavenCache(input.Options.UseMavenCache),
 		pom.WithMavenCacheTtl(input.Options.MavenCacheTtl),
+		// TODO: support passing in multiple maven central URLs eventually for redundancy?
 		pom.WithReleaseRemoteRepos([]string{input.Options.MavenCentralURL}),
 	)
 	
