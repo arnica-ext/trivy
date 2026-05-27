@@ -178,6 +178,11 @@ func registryMirrors(hostRef name.Reference, option types.RegistryOptions) ([]na
 }
 
 func authOptions(ctx context.Context, ref name.Reference, option types.RegistryOptions) []remote.Option {
+	if option.RegistryToken != "" {
+		bearer := authn.Bearer{Token: option.RegistryToken}
+		return []remote.Option{remote.WithAuth(&bearer)}
+	}
+
 	var opts []remote.Option
 	for _, cred := range option.Credentials {
 		opts = append(opts, remote.WithAuth(&authn.Basic{
@@ -192,15 +197,8 @@ func authOptions(ctx context.Context, ref name.Reference, option types.RegistryO
 		opts = append(opts, remote.WithAuth(&token))
 	}
 
-	switch {
-	case option.RegistryToken != "":
-		bearer := authn.Bearer{Token: option.RegistryToken}
-		return []remote.Option{remote.WithAuth(&bearer)}
-	default:
-		// Use the keychain anyway at the end
-		opts = append(opts, remote.WithAuthFromKeychain(authn.NewMultiKeychain(authn.DefaultKeychain, github.Keychain)))
-		return opts
-	}
+	opts = append(opts, remote.WithAuthFromKeychain(authn.NewMultiKeychain(authn.DefaultKeychain, github.Keychain)))
+	return opts
 }
 
 // resolvePlatform resolves the OS platform for a given image reference.
