@@ -1,7 +1,7 @@
 #!/bin/bash
 set -e
 
-TAG="v0.64.1-arnica-patch-0.0.7"
+TAG="v0.64.1-arnica-patch-0.0.8"
 
 sed -i '' -E "s/(var ver = \")[^\"]+(\")/\1$TAG\2/" pkg/version/app/version.go
 
