@@ -180,7 +180,10 @@ func registryMirrors(hostRef name.Reference, option types.RegistryOptions) ([]na
 func authOptions(ctx context.Context, ref name.Reference, option types.RegistryOptions) []remote.Option {
 	if option.RegistryToken != "" {
 		bearer := authn.Bearer{Token: option.RegistryToken}
-		return []remote.Option{remote.WithAuth(&bearer)}
+		return []remote.Option{
+			remote.WithAuth(&bearer),
+			remote.WithAuthFromKeychain(authn.NewMultiKeychain(authn.DefaultKeychain, github.Keychain)),
+		}
 	}
 
 	var opts []remote.Option
