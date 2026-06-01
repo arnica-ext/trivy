@@ -181,6 +181,10 @@ func (c *Client) isNewDB(ctx context.Context, meta metadata.Metadata) bool {
 
 // Download downloads the DB file
 func (c *Client) Download(ctx context.Context, dst string, opt types.RegistryOptions) error {
+	// Don't send the scan target's registry credentials to the public vulnerability DB registry.
+	opt.RegistryToken = ""
+	opt.Credentials = nil
+
 	if err := c.downloadDB(ctx, opt, dst); err != nil {
 		return xerrors.Errorf("OCI artifact error: %w", err)
 	}
