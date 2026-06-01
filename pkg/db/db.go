@@ -181,6 +181,9 @@ func (c *Client) isNewDB(ctx context.Context, meta metadata.Metadata) bool {
 
 // Download downloads the DB file
 func (c *Client) Download(ctx context.Context, dst string, opt types.RegistryOptions) error {
+	opt.RegistryToken = ""
+	opt.Credentials = nil
+
 	if err := c.downloadDB(ctx, opt, dst); err != nil {
 		return xerrors.Errorf("OCI artifact error: %w", err)
 	}

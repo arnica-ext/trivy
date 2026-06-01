@@ -114,6 +114,9 @@ func (u *Updater) downloadDB(ctx context.Context) error {
 }
 
 func Init(cacheDir string, javaDBRepositories []name.Reference, skip, quiet bool, registryOption ftypes.RegistryOptions) {
+	registryOption.RegistryToken = ""
+	registryOption.Credentials = nil
+
 	updater = &Updater{
 		repos:          javaDBRepositories,
 		dbDir:          dbDir(cacheDir),
