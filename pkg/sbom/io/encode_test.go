@@ -1540,6 +1540,55 @@ func TestEncoder_Encode(t *testing.T) {
 	}
 }
 
+func TestEncoder_EncodeRootPackageCycle(t *testing.T) {
+	uuid.SetFakeUUID(t, "3ff14136-e09f-4df9-80ea-%012d")
+
+	report := types.Report{
+		SchemaVersion: 2,
+		ArtifactName:  "test",
+		ArtifactType:  ftypes.TypeFilesystem,
+		Results: []types.Result{
+			{
+				Target: "uv.lock",
+				Type:   ftypes.Uv,
+				Class:  types.ClassLangPkg,
+				Packages: []ftypes.Package{
+					{
+						ID:      "root@1.0.0",
+						Name:    "root",
+						Version: "1.0.0",
+						Identifier: ftypes.PkgIdentifier{
+							UID: "root",
+						},
+						Relationship: ftypes.RelationshipRoot,
+						DependsOn:    []string{"dependency@1.0.0"},
+					},
+					{
+						ID:      "dependency@1.0.0",
+						Name:    "dependency",
+						Version: "1.0.0",
+						Identifier: ftypes.PkgIdentifier{
+							UID: "dependency",
+						},
+						Relationship: ftypes.RelationshipDirect,
+						DependsOn:    []string{"root@1.0.0"},
+					},
+				},
+			},
+		},
+	}
+
+	got, err := sbomio.NewEncoder(core.Options{GenerateBOMRef: true}).Encode(report)
+	require.NoError(t, err)
+
+	appID := uuid.MustParse("3ff14136-e09f-4df9-80ea-000000000002")
+	rootID := uuid.MustParse("3ff14136-e09f-4df9-80ea-000000000003")
+	assert.Contains(t, got.Relationships()[appID], core.Relationship{
+		Dependency: rootID,
+		Type:       core.RelationshipContains,
+	})
+}
+
 var (
 	appComponent = &core.Component{
 		Root: true,

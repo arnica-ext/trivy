@@ -411,9 +411,9 @@ func (*Encoder) vulnerability(vuln types.DetectedVulnerability) core.Vulnerabili
 // belongToParent determines if a package should be directly included in the parent based on its relationship and dependencies.
 func (*Encoder) belongToParent(pkg ftypes.Package, parents map[string]ftypes.Packages, hasRoot bool) bool {
 	// Case 1: Relationship: known , DependsOn: known
-	//         Packages with no parent are included in the parent
+	//         Root packages and packages with no parent are included in the parent
 	//         - Relationship:
-	//           - Root: true (it doesn't have a parent)
+	//           - Root: true (even if a dependency cycle gives it a parent)
 	//           - Workspace: false (it always has a parent)
 	//           - Direct:
 	//             - No root dependency in the project: true (e.g., poetry.lock)
@@ -426,6 +426,9 @@ func (*Encoder) belongToParent(pkg ftypes.Package, parents map[string]ftypes.Pac
 	// Case 4: Relationship: unknown, DependsOn: known (e.g., GoBinaries, OS packages)
 	//         - Packages with parents: false. These packages are included in the packages from `parents` (e.g. GoBinaries deps and root package).
 	//         - Packages without parents: true. These packages are included in the parent (e.g. OS packages without parents).
+	if pkg.Relationship == ftypes.RelationshipRoot {
+		return true
+	}
 	if pkg.Relationship == ftypes.RelationshipDirect {
 		return !hasRoot
 	}
