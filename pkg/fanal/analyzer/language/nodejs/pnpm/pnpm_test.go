@@ -4,6 +4,7 @@ import (
 	"os"
 	"sort"
 	"testing"
+	"testing/fstest"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -158,5 +159,26 @@ func Test_pnpmPkgLibraryAnalyzer_Required(t *testing.T) {
 			got := a.Required(tt.filePath, nil)
 			assert.Equal(t, tt.want, got)
 		})
+	}
+}
+
+func TestPeerContextLicenses(t *testing.T) {
+	a, err := newPnpmAnalyzer(analyzer.AnalyzerOptions{})
+	require.NoError(t, err)
+	got, err := a.PostAnalyze(t.Context(), analyzer.PostAnalysisInput{FS: fstest.MapFS{
+		"pnpm-lock.yaml": &fstest.MapFile{Data: []byte(`lockfileVersion: '9.0'
+packages:
+  example@1.0.0: {}
+snapshots:
+  example@1.0.0(peer@1.0.0): {}
+  example@1.0.0(peer@2.0.0): {}
+`)},
+		"node_modules/example/package.json": &fstest.MapFile{Data: []byte(`{"name":"example","version":"1.0.0","license":"MIT"}`)},
+	}})
+	require.NoError(t, err)
+	require.Len(t, got.Applications, 1)
+	require.Len(t, got.Applications[0].Packages, 2)
+	for _, pkg := range got.Applications[0].Packages {
+		require.Equal(t, []string{"MIT"}, pkg.Licenses)
 	}
 }
