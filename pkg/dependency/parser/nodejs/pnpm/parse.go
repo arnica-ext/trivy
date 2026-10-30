@@ -85,7 +85,18 @@ func (p *Parser) Parse(r xio.ReadSeekerAt) ([]ftypes.Package, []ftypes.Dependenc
 		pkgs, deps = p.parse(lockVer, lockFile)
 	}
 
-	sort.Sort(ftypes.Packages(pkgs))
+	// Peer contexts can share name, version and relationship. Use the graph ID
+	// to break ties so map iteration does not affect package ordering.
+	sort.Slice(pkgs, func(i, j int) bool {
+		packages := ftypes.Packages(pkgs)
+		if packages.Less(i, j) {
+			return true
+		}
+		if packages.Less(j, i) {
+			return false
+		}
+		return pkgs[i].ID < pkgs[j].ID
+	})
 	sort.Sort(ftypes.Dependencies(deps))
 	return pkgs, deps, nil
 }
@@ -144,75 +155,93 @@ func (p *Parser) parseV9(lockFile LockFile) ([]ftypes.Package, []ftypes.Dependen
 	resolvedPkgs := make(map[string]ftypes.Package)
 	resolvedDeps := make(map[string]ftypes.Dependency)
 
-	// Check all snapshots and save with resolved versions
-	resolvedSnapshots := make(map[string][]string)
-	for depPath, snapshot := range lockFile.Snapshots {
-		name, version, _ := p.parseDepPath(depPath, lockVer)
-
-		var dependsOn []string
-		for depName, depVer := range lo.Assign(snapshot.OptionalDependencies, snapshot.Dependencies) {
-			depVer = p.trimPeerDeps(depVer, lockVer) // pnpm has already separated dep name. therefore, we only need to separate peer deps.
-			depVer = p.parseVersion(depPath, depVer, lockVer)
-			id := packageID(depName, depVer)
-			if _, ok := lockFile.Packages[id]; ok {
-				dependsOn = append(dependsOn, id)
-			}
+	// A package can have several snapshots with different resolved peers. Keep
+	// the snapshot path as its graph identity, but use package metadata for the
+	// version used by vulnerability matching.
+	paths := make(map[string]string) // snapshot path => package metadata path
+	for depPath := range lockFile.Snapshots {
+		base := p.trimPeerDeps(depPath, lockVer)
+		if _, ok := lockFile.Packages[base]; ok {
+			paths[depPath] = base
 		}
-		if len(dependsOn) > 0 {
-			resolvedSnapshots[packageID(name, version)] = dependsOn
-		}
-
 	}
-
-	// Parse `Importers` to find all direct dependencies
-	devDeps := make(map[string]string)
-	deps := make(map[string]string)
-	for _, importer := range lockFile.Importers {
-		for n, v := range importer.DevDependencies {
-			devDeps[n] = v.Version
-		}
-		for n, v := range importer.Dependencies {
-			deps[n] = v.Version
+	// Retain package metadata even when a lockfile has no corresponding snapshot.
+	withSnapshots := set.New[string]()
+	for _, base := range paths {
+		withSnapshots.Append(base)
+	}
+	for depPath := range lockFile.Packages {
+		if !withSnapshots.Contains(depPath) {
+			paths[depPath] = depPath
 		}
 	}
 
-	for depPath, pkgInfo := range lockFile.Packages {
-		name, ver, ref := p.parseDepPath(depPath, lockVer)
-		parsedVer := p.parseVersion(depPath, ver, lockVer)
-
+	ids := make(map[string]string, len(paths))
+	for depPath, base := range paths {
+		pkgInfo := lockFile.Packages[base]
+		name, ver, ref := p.parseDepPath(base, lockVer)
+		parsedVer := p.parseVersion(base, ver, lockVer)
 		if pkgInfo.Version != "" {
 			parsedVer = pkgInfo.Version
 		}
-
-		// By default, pkg is dev pkg.
-		// We will update `Dev` field later.
-		dev := true
-		relationship := ftypes.RelationshipIndirect
-		if v, ok := devDeps[name]; ok && p.trimPeerDeps(v, lockVer) == ver {
-			relationship = ftypes.RelationshipDirect
-		}
-		if v, ok := deps[name]; ok && p.trimPeerDeps(v, lockVer) == ver {
-			relationship = ftypes.RelationshipDirect
-			dev = false // mark root direct deps to update `dev` field of their child deps.
-		}
-
 		id := packageID(name, parsedVer)
+		if depPath != base {
+			id = depPath
+		}
+		ids[depPath] = id
 		resolvedPkgs[id] = ftypes.Package{
 			ID:                 id,
 			Name:               name,
 			Version:            parsedVer,
-			Relationship:       relationship,
-			Dev:                dev,
+			Relationship:       ftypes.RelationshipIndirect,
+			Dev:                true,
 			ExternalReferences: toExternalRefs(ref),
 		}
+	}
 
-		// Save child deps
-		if dependsOn, ok := resolvedSnapshots[depPath]; ok {
-			sort.Strings(dependsOn)
-			resolvedDeps[id] = ftypes.Dependency{
-				ID:        id,
-				DependsOn: dependsOn, // Deps from dependsOn has been resolved when parsing snapshots
+	// Alias values contain the actual package name; ordinary values contain
+	// only the version (including its peer context).
+	resolve := func(name, version string) (string, bool) {
+		id, ok := ids[packageID(name, version)]
+		if !ok {
+			id, ok = ids[version]
+		}
+		return id, ok
+	}
+	for depPath, snapshot := range lockFile.Snapshots {
+		id, ok := ids[depPath]
+		if !ok {
+			continue
+		}
+		dependsOn := set.New[string]()
+		for name, version := range lo.Assign(snapshot.OptionalDependencies, snapshot.Dependencies) {
+			if depID, ok := resolve(name, version); ok {
+				dependsOn.Append(depID)
 			}
+		}
+		if dependsOn.Size() > 0 {
+			children := dependsOn.Items()
+			sort.Strings(children)
+			resolvedDeps[id] = ftypes.Dependency{ID: id, DependsOn: children}
+		}
+	}
+
+	// Process every importer independently: different workspaces can directly
+	// require different versions or peer contexts of the same package.
+	markDirect := func(name, version string, dev bool) {
+		if id, ok := resolve(name, version); ok {
+			pkg := resolvedPkgs[id]
+			pkg.Relationship = ftypes.RelationshipDirect
+			pkg.Dev = pkg.Dev && dev
+			resolvedPkgs[id] = pkg
+		}
+	}
+	for _, importer := range lockFile.Importers {
+		for name, dep := range importer.DevDependencies {
+			markDirect(name, dep.Version, true)
+		}
+		for name, dep := range importer.Dependencies {
+			markDirect(name, dep.Version, false)
 		}
 	}
 

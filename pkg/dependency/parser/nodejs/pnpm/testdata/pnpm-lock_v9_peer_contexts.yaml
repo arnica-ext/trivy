@@ -1,0 +1,38 @@
+lockfileVersion: '9.0'
+importers:
+  .:
+    dependencies:
+      client-alias:
+        version: '@aws-sdk/client-example@1.0.0(follow-redirects@1.15.11(debug@4.3.6))'
+  tools:
+    devDependencies:
+      '@aws-sdk/client-example':
+        version: 1.0.0(follow-redirects@1.15.11(debug@4.4.3))
+  worker:
+    dependencies:
+      debug:
+        version: 4.3.6
+  dev-worker:
+    devDependencies:
+      debug:
+        version: 4.4.3
+packages:
+  '@aws-sdk/client-example@1.0.0': {}
+  follow-redirects@1.15.11: {}
+  debug@4.3.6: {}
+  debug@4.4.3: {}
+snapshots:
+  '@aws-sdk/client-example@1.0.0(follow-redirects@1.15.11(debug@4.3.6))':
+    dependencies:
+      follow-redirects: 1.15.11(debug@4.3.6)
+  '@aws-sdk/client-example@1.0.0(follow-redirects@1.15.11(debug@4.4.3))':
+    optionalDependencies:
+      follow-redirects: 1.15.11(debug@4.4.3)
+  follow-redirects@1.15.11(debug@4.3.6):
+    dependencies:
+      debug: 4.3.6
+  follow-redirects@1.15.11(debug@4.4.3):
+    dependencies:
+      debug: 4.4.3
+  debug@4.3.6: {}
+  debug@4.4.3: {}

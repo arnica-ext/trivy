@@ -286,3 +286,36 @@ func Test_parseVersion(t *testing.T) {
 
 	}
 }
+
+func TestParseV9PeerContexts(t *testing.T) {
+	const oldClient = "@aws-sdk/client-example@1.0.0(follow-redirects@1.15.11(debug@4.3.6))"
+	const newClient = "@aws-sdk/client-example@1.0.0(follow-redirects@1.15.11(debug@4.4.3))"
+	const oldRedirect = "follow-redirects@1.15.11(debug@4.3.6)"
+	const newRedirect = "follow-redirects@1.15.11(debug@4.4.3)"
+	want := []ftypes.Package{
+		{ID: oldClient, Name: "@aws-sdk/client-example", Version: "1.0.0", Relationship: ftypes.RelationshipDirect},
+		{ID: newClient, Name: "@aws-sdk/client-example", Version: "1.0.0", Relationship: ftypes.RelationshipDirect, Dev: true},
+		{ID: oldRedirect, Name: "follow-redirects", Version: "1.15.11", Relationship: ftypes.RelationshipIndirect},
+		{ID: newRedirect, Name: "follow-redirects", Version: "1.15.11", Relationship: ftypes.RelationshipIndirect, Dev: true},
+		{ID: "debug@4.3.6", Name: "debug", Version: "4.3.6", Relationship: ftypes.RelationshipDirect},
+		{ID: "debug@4.4.3", Name: "debug", Version: "4.4.3", Relationship: ftypes.RelationshipDirect, Dev: true},
+	}
+	wantDeps := []ftypes.Dependency{
+		{ID: oldClient, DependsOn: []string{oldRedirect}},
+		{ID: newClient, DependsOn: []string{newRedirect}},
+		{ID: oldRedirect, DependsOn: []string{"debug@4.3.6"}},
+		{ID: newRedirect, DependsOn: []string{"debug@4.4.3"}},
+	}
+	sort.Sort(ftypes.Packages(want))
+	sort.Sort(ftypes.Dependencies(wantDeps))
+	// Repeated parsing exercises map iteration order in both snapshots and importers.
+	for range 30 {
+		f, err := os.Open("testdata/pnpm-lock_v9_peer_contexts.yaml")
+		require.NoError(t, err)
+		pkgs, deps, err := NewParser().Parse(f)
+		require.NoError(t, f.Close())
+		require.NoError(t, err)
+		require.Equal(t, want, pkgs)
+		require.Equal(t, wantDeps, deps)
+	}
+}

@@ -11,6 +11,7 @@ import (
 
 	"golang.org/x/xerrors"
 
+	"github.com/aquasecurity/trivy/pkg/dependency"
 	"github.com/aquasecurity/trivy/pkg/dependency/parser/nodejs/packagejson"
 	"github.com/aquasecurity/trivy/pkg/dependency/parser/nodejs/pnpm"
 	"github.com/aquasecurity/trivy/pkg/fanal/analyzer"
@@ -25,7 +26,7 @@ func init() {
 	analyzer.RegisterPostAnalyzer(analyzer.TypePnpm, newPnpmAnalyzer)
 }
 
-const version = 2
+const version = 3
 
 type pnpmAnalyzer struct {
 	logger            *log.Logger
@@ -66,7 +67,7 @@ func (a pnpmAnalyzer) PostAnalyze(_ context.Context, input analyzer.PostAnalysis
 
 		// Fill licenses
 		for i, lib := range app.Packages {
-			if l, ok := licenses[lib.ID]; ok {
+			if l, ok := licenses[dependency.ID(types.Pnpm, lib.Name, lib.Version)]; ok {
 				app.Packages[i].Licenses = l
 			}
 		}

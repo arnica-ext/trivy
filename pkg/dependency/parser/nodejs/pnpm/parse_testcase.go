@@ -760,7 +760,7 @@ var (
 			Relationship: ftypes.RelationshipDirect,
 		},
 		{
-			ID:           "debug@4.3.4",
+			ID:           "debug@4.3.4(supports-color@8.1.1)",
 			Name:         "debug",
 			Version:      "4.3.4",
 			Relationship: ftypes.RelationshipIndirect,
@@ -871,7 +871,7 @@ var (
 	}
 	pnpmV9Deps = []ftypes.Dependency{
 		{
-			ID: "debug@4.3.4",
+			ID: "debug@4.3.4(supports-color@8.1.1)",
 			DependsOn: []string{
 				"ms@2.0.0",
 			},
@@ -885,7 +885,7 @@ var (
 		{
 			ID: "finalhandler@1.1.1",
 			DependsOn: []string{
-				"debug@4.3.4",
+				"debug@4.3.4(supports-color@8.1.1)",
 				"encodeurl@1.0.2",
 				"escape-html@1.0.3",
 				"on-finished@2.3.0",
@@ -916,7 +916,7 @@ var (
 
 	pnpmV9CyclicImport = []ftypes.Package{
 		{
-			ID:           "update-browserslist-db@1.0.16",
+			ID:           "update-browserslist-db@1.0.16(browserslist@4.23.0)",
 			Name:         "update-browserslist-db",
 			Version:      "1.0.16",
 			Relationship: ftypes.RelationshipDirect,
@@ -965,11 +965,11 @@ var (
 				"caniuse-lite@1.0.30001627",
 				"electron-to-chromium@1.4.789",
 				"node-releases@2.0.14",
-				"update-browserslist-db@1.0.16",
+				"update-browserslist-db@1.0.16(browserslist@4.23.0)",
 			},
 		},
 		{
-			ID: "update-browserslist-db@1.0.16",
+			ID: "update-browserslist-db@1.0.16(browserslist@4.23.0)",
 			DependsOn: []string{
 				"browserslist@4.23.0",
 				"escalade@3.1.2",
